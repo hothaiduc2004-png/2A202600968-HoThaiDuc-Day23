@@ -1,42 +1,31 @@
-"""Report generation helper."""
+# Lab Report — Day 08 LangGraph Agentic Orchestration
 
-from __future__ import annotations
+## 1. Metrics Summary
 
-from pathlib import Path
+| Metric | Value |
+|--------|-------|
+| Total Scenarios | 7 |
+| Success Rate | 100.0% |
+| Avg Nodes Visited | 6.4 |
+| Total Retries | 3 |
+| Total Interrupts (HITL) | 2 |
+| Resume Success | False |
 
-from .metrics import MetricsReport
+## 2. Per-Scenario Results
 
+| Scenario ID | Expected Route | Actual Route | Success | Nodes | Retries | Approval |
+|-------------|---------------|--------------|---------|-------|---------|----------|
+| S01_simple | simple | simple | ✅ | 4 | 0 | — |
+| S02_tool | tool | tool | ✅ | 6 | 0 | — |
+| S03_missing | missing_info | missing_info | ✅ | 4 | 0 | — |
+| S04_risky | risky | risky | ✅ | 8 | 0 | ✅ |
+| S05_error | error | error | ✅ | 10 | 2 | — |
+| S06_delete | risky | risky | ✅ | 8 | 0 | ✅ |
+| S07_dead_letter | error | error | ✅ | 5 | 1 | — |
 
-def render_report(metrics: MetricsReport) -> str:
-    """Render a complete lab report from metrics data."""
-    lines = []
+## 3. Architecture
 
-    lines.append("# Lab Report — Day 08 LangGraph Agentic Orchestration\n")
-    lines.append("## 1. Metrics Summary\n")
-    lines.append("| Metric | Value |")
-    lines.append("|--------|-------|")
-    lines.append(f"| Total Scenarios | {metrics.total_scenarios} |")
-    lines.append(f"| Success Rate | {metrics.success_rate:.1%} |")
-    lines.append(f"| Avg Nodes Visited | {metrics.avg_nodes_visited:.1f} |")
-    lines.append(f"| Total Retries | {metrics.total_retries} |")
-    lines.append(f"| Total Interrupts (HITL) | {metrics.total_interrupts} |")
-    lines.append(f"| Resume Success | {metrics.resume_success} |")
-    lines.append("")
-
-    lines.append("## 2. Per-Scenario Results\n")
-    lines.append("| Scenario ID | Expected Route | Actual Route | Success | Nodes | Retries | Approval |")
-    lines.append("|-------------|---------------|--------------|---------|-------|---------|----------|")
-    for s in metrics.scenario_metrics:
-        ok = "✅" if s.success else "❌"
-        approval = "✅" if s.approval_observed else ("⚠️ required" if s.approval_required else "—")
-        lines.append(
-            f"| {s.scenario_id} | {s.expected_route} | {s.actual_route or '?'} "
-            f"| {ok} | {s.nodes_visited} | {s.retry_count} | {approval} |"
-        )
-    lines.append("")
-
-    lines.append("## 3. Architecture\n")
-    lines.append("""### Graph Design
+### Graph Design
 The workflow is a `StateGraph` with 11 nodes wired in a directed graph with conditional routing:
 
 ```
@@ -63,10 +52,10 @@ Additional fields added beyond the starter: `evaluation_result`, `pending_questi
 ### LLM Integration
 - `classify_node`: Uses `llm.with_structured_output(ClassificationResult)` for reliable intent classification via Pydantic model.
 - `answer_node`: Uses LLM with grounded context (query + tool_results + approval) to generate responses.
-""")
 
-    lines.append("## 4. Failure Analysis\n")
-    lines.append("""### Failure Mode 1: LLM Classification Errors
+## 4. Failure Analysis
+
+### Failure Mode 1: LLM Classification Errors
 The `classify_node` relies on an LLM which may occasionally misclassify borderline queries (e.g., treating a vague refund request as `missing_info` instead of `risky`). This is mitigated by the priority prompt (risky > tool > missing_info > error > simple) and structured output via Pydantic.
 
 ### Failure Mode 2: Unbounded Retry Loops
@@ -74,29 +63,11 @@ Without the `attempt < max_attempts` bound in `route_after_retry`, error scenari
 
 ### Failure Mode 3: Missing HITL on Approval Path
 If `approval_node` fails or approval dict is malformed, `route_after_approval` defaults to `clarify` rather than crashing. The mock auto-approval ensures CI passes while real HITL is opt-in via `LANGGRAPH_INTERRUPT=true`.
-""")
 
-    lines.append("## 5. Improvement Plan\n")
-    lines.append("""1. **LLM-as-judge in evaluate_node**: Replace the `ERROR` substring heuristic with an LLM call to judge tool result quality.
+## 5. Improvement Plan
+
+1. **LLM-as-judge in evaluate_node**: Replace the `ERROR` substring heuristic with an LLM call to judge tool result quality.
 2. **Parallel fan-out**: Use `Send()` to call multiple tools concurrently for complex queries.
 3. **Real HITL UI**: Build a Streamlit dashboard that receives `interrupt()` payloads and lets a human approve/reject.
 4. **Time travel**: Use `get_state_history()` to replay scenarios for debugging.
 5. **Crash recovery**: Swap `MemorySaver` for `SqliteSaver` so checkpoints survive process restarts.
-""")
-
-    # Failure list
-    failed = [s for s in metrics.scenario_metrics if not s.success]
-    if failed:
-        lines.append("## 6. Failed Scenarios\n")
-        for s in failed:
-            lines.append(f"- **{s.scenario_id}**: expected `{s.expected_route}`, got `{s.actual_route}`. Errors: {s.errors}")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def write_report(metrics: MetricsReport, output_path: str | Path) -> None:
-    """Write the rendered report to a file."""
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_report(metrics), encoding="utf-8")

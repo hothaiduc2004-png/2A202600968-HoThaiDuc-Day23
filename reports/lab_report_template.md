@@ -2,9 +2,9 @@
 
 ## 1. Team / student
 
-- Name:
+- Name: Hồ Thái Đức
 - Repo/commit:
-- Date:
+- Date: 29/6/2026
 
 ## 2. Architecture
 
